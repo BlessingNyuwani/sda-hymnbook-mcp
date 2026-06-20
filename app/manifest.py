@@ -44,6 +44,10 @@ TOOLS: list[dict[str, Any]] = [
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
             },
             "required": [],
+            "anyOf": [
+                {"required": ["query"]},
+                {"required": ["number"]},
+            ],
             "additionalProperties": False,
         },
         "output_schema": STANDARD_OUTPUT_SCHEMA,
@@ -62,6 +66,10 @@ TOOLS: list[dict[str, Any]] = [
                 "include_lyrics": {"type": "boolean", "default": True},
             },
             "required": [],
+            "anyOf": [
+                {"required": ["number"]},
+                {"required": ["title"]},
+            ],
             "additionalProperties": False,
         },
         "output_schema": STANDARD_OUTPUT_SCHEMA,
