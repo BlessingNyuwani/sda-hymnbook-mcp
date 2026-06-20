@@ -1,0 +1,14 @@
+services:
+  sda-hymnbook-mcp:
+    build:
+      context: .
+      ssh:
+        - default
+    image: sda-hymnbook-mcp:latest
+    container_name: sda-hymnbook-mcp
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "62752:62752"

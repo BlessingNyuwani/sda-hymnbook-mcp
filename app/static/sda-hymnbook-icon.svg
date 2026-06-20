@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="SDA Hymnbook">
+  <rect width="256" height="256" rx="56" fill="#5a3d70"/>
+  <path d="M74 184V74c0-14 11-25 25-25h69v135H99c-14 0-25 11-25 25" fill="#f8efd8"/>
+  <path d="M104 92h44M104 122h44M104 152h32" stroke="#5a3d70" stroke-width="10" stroke-linecap="round"/>
+  <path d="M171 61v112" stroke="#c8923a" stroke-width="12" stroke-linecap="round"/>
+</svg>
