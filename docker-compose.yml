@@ -12,3 +12,11 @@ services:
         required: false
     ports:
       - "62752:62752"
+    networks:
+      - default
+      - sda-library-storage
+
+networks:
+  sda-library-storage:
+    external: true
+    name: sda-library-storage_default

@@ -70,6 +70,16 @@ def search_hymns(
     return _call("search_hymns", locals())
 
 
+@agent_app.tool(**_tool_kwargs("search_hymnbooks"))
+def search_hymnbooks(
+    query: str | None = None,
+    language: str | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """Search stored hymnbook PDFs semantically."""
+    return _call("search_hymnbooks", locals())
+
+
 @agent_app.tool(**_tool_kwargs("get_hymn"))
 def get_hymn(
     number: int | None = None,

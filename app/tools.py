@@ -36,6 +36,8 @@ def call_tool(name: str, arguments: dict[str, Any] | None) -> dict[str, Any]:
     arguments = arguments or {}
     if name == "search_hymns":
         return search_hymns(arguments)
+    if name == "search_hymnbooks":
+        return search_hymnbooks(arguments)
     if name == "get_hymn":
         return get_hymn(arguments)
     if name == "get_hymn_lyrics":
@@ -83,6 +85,49 @@ def search_hymns(arguments: dict[str, Any]) -> dict[str, Any]:
         "message": message,
         "content": message,
         "sources": _source_list(_db_url(), SOURCE_REPO_URL),
+    }
+
+
+def search_hymnbooks(arguments: dict[str, Any]) -> dict[str, Any]:
+    query = _clean(arguments.get("query"))
+    if not query:
+        return _failure("hymnbook_search", "query is required", "validation_error")
+    language = _language(arguments.get("language"))
+    limit = _safe_int(arguments.get("limit"), default=8, minimum=1, maximum=25)
+
+    semantic_result = _semantic_search_hymnbooks(query=query, language=language, limit=limit)
+    if semantic_result is not None:
+        return semantic_result
+
+    try:
+        matches = _storage_hymnbook_matches(query=query, language=language, limit=limit)
+    except SourceHTTPError as exc:
+        return _failure(
+            "hymnbook_search",
+            exc.message,
+            "source_http_error",
+            upstream_status_code=exc.status_code,
+            source_url=exc.url,
+        )
+    except ValueError as exc:
+        return _failure("hymnbook_search", str(exc), "source_request_failed")
+
+    results = [_storage_hymnbook_file(item) for item in matches]
+    message = _hymnbook_search_message(results, query)
+    return {
+        "kind": "hymnbook_search",
+        "status": "found" if results else "not_found",
+        "success": True,
+        "has_results": bool(results),
+        "query": query,
+        "language": language,
+        "search_mode": "metadata",
+        "count": len(results),
+        "results": results,
+        "hymnbooks": results,
+        "message": message,
+        "content": message,
+        "sources": _source_list(_storage_hymnbook_catalog_url(), *[result.get("source_url") for result in results]),
     }
 
 
@@ -228,6 +273,228 @@ def download_hymnbook(arguments: dict[str, Any]) -> dict[str, Any]:
         "content": message,
         "sources": _source_list(_storage_hymnbook_catalog_url(), *[file.get("source_url") for file in files]),
     }
+
+
+def _semantic_search_hymnbooks(query: str, language: str, limit: int) -> dict[str, Any] | None:
+    database_url = (
+        os.getenv("SDA_HYMNBOOK_DATABASE_URL")
+        or os.getenv("SDA_LIBRARY_DATABASE_URL")
+        or os.getenv("DATABASE_URL")
+    )
+    if not database_url or not os.getenv("OPENAI_API_KEY"):
+        return None
+
+    try:
+        vector = _embed_query(query)
+        rows = _hybrid_search_rows(
+            database_url,
+            query=query,
+            language=language,
+            vector=vector,
+            limit=limit,
+            item_type="hymnbook",
+        )
+    except Exception as exc:
+        if _semantic_strict_mode():
+            return _failure(
+                "hymnbook_search",
+                f"Semantic search failed: {_clip(str(exc), 240)}",
+                "semantic_search_failed",
+                query=query,
+            )
+        return None
+
+    results = [_hymnbook_semantic_result(row) for row in rows]
+    message = _semantic_search_message(results, query, "hymnbook")
+    return {
+        "kind": "hymnbook_search",
+        "status": "found" if results else "not_found",
+        "success": True,
+        "has_results": bool(results),
+        "query": query,
+        "language": language,
+        "search_mode": "hybrid_semantic",
+        "ranking": {
+            "strategy": "pgvector_cosine + postgres_full_text + reciprocal_rank_fusion",
+            "embedding_model": os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
+            "embedding_dimensions": _embedding_dimensions(),
+        },
+        "count": len(results),
+        "results": results,
+        "hymnbooks": results,
+        "message": message,
+        "content": message,
+        "sources": _source_list(_storage_hymnbook_catalog_url(), *[result.get("source_url") for result in results]),
+    }
+
+
+def _embed_query(query: str) -> list[float]:
+    from openai import OpenAI
+
+    client = OpenAI()
+    response = client.embeddings.create(
+        model=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
+        input=query,
+        dimensions=_embedding_dimensions(),
+    )
+    return list(response.data[0].embedding)
+
+
+def _hybrid_search_rows(
+    database_url: str,
+    *,
+    query: str,
+    language: str,
+    vector: list[float],
+    limit: int,
+    item_type: str,
+) -> list[dict[str, Any]]:
+    import psycopg
+    from psycopg.rows import dict_row
+
+    pool_size = max(limit * 8, 40)
+    vector_value = _vector_literal(vector)
+    params = {
+        "query": query,
+        "language": language,
+        "limit": limit,
+        "pool_size": pool_size,
+        "vector": vector_value,
+        "title_query": f"%{query}%",
+        "item_type": item_type,
+    }
+    filters = """
+              AND b.item_type = %(item_type)s
+              AND (%(language)s = 'all' OR b.language = %(language)s)
+    """
+    sql = f"""
+        WITH vector_hits AS (
+            SELECT
+                c.id,
+                row_number() OVER (ORDER BY c.embedding <=> %(vector)s::vector) AS vector_rank,
+                1 - (c.embedding <=> %(vector)s::vector) AS vector_score
+            FROM book_chunks c
+            JOIN books b ON b.id = c.book_id
+            WHERE c.embedding IS NOT NULL
+            {filters}
+            ORDER BY c.embedding <=> %(vector)s::vector
+            LIMIT %(pool_size)s
+        ),
+        text_hits AS (
+            SELECT
+                c.id,
+                row_number() OVER (
+                    ORDER BY ts_rank_cd(c.search_tsv, websearch_to_tsquery('english', %(query)s)) DESC
+                ) AS text_rank,
+                ts_rank_cd(c.search_tsv, websearch_to_tsquery('english', %(query)s)) AS text_score
+            FROM book_chunks c
+            JOIN books b ON b.id = c.book_id
+            WHERE c.search_tsv @@ websearch_to_tsquery('english', %(query)s)
+            {filters}
+            ORDER BY ts_rank_cd(c.search_tsv, websearch_to_tsquery('english', %(query)s)) DESC
+            LIMIT %(pool_size)s
+        ),
+        combined AS (
+            SELECT
+                coalesce(v.id, t.id) AS chunk_id,
+                v.vector_rank,
+                v.vector_score,
+                t.text_rank,
+                t.text_score
+            FROM vector_hits v
+            FULL OUTER JOIN text_hits t ON t.id = v.id
+        )
+        SELECT
+            b.id AS id,
+            b.id AS book_id,
+            b.code,
+            b.title,
+            b.parent_title,
+            b.author,
+            b.language,
+            b.format,
+            b.item_type,
+            b.collection,
+            b.audience,
+            b.edition,
+            b.download_path,
+            b.source_url,
+            c.chapter,
+            c.page,
+            c.text,
+            combined.vector_score,
+            combined.text_score,
+            (
+                coalesce(1.0 / (60 + combined.vector_rank), 0) +
+                coalesce(1.0 / (60 + combined.text_rank), 0) +
+                CASE
+                    WHEN lower(b.title) = lower(%(query)s) THEN 0.05
+                    WHEN b.title ILIKE %(title_query)s THEN 0.03
+                    WHEN b.code ILIKE %(title_query)s THEN 0.025
+                    ELSE 0
+                END
+            ) AS score
+        FROM combined
+        JOIN book_chunks c ON c.id = combined.chunk_id
+        JOIN books b ON b.id = c.book_id
+        ORDER BY score DESC, combined.vector_score DESC NULLS LAST
+        LIMIT %(limit)s
+    """
+    with psycopg.connect(database_url, row_factory=dict_row) as conn:
+        return list(conn.execute(sql, params).fetchall())
+
+
+def _hymnbook_semantic_result(row: dict[str, Any]) -> dict[str, Any]:
+    download_path = row.get("download_path")
+    download_url = _storage_download_url(str(download_path)) if download_path else None
+    text = _clean(row.get("text"))
+    return {
+        "id": row.get("id"),
+        "book_id": row.get("book_id"),
+        "code": row.get("code"),
+        "title": row.get("title"),
+        "parent_title": row.get("parent_title"),
+        "language": row.get("language"),
+        "format": row.get("format"),
+        "item_type": row.get("item_type"),
+        "collection": row.get("collection"),
+        "chapter": row.get("chapter"),
+        "page": row.get("page"),
+        "score": round(float(row.get("score") or 0), 6),
+        "vector_score": round(float(row.get("vector_score") or 0), 6) if row.get("vector_score") is not None else None,
+        "text_score": round(float(row.get("text_score") or 0), 6) if row.get("text_score") is not None else None,
+        "snippet": _snippet(text),
+        "download_url": download_url,
+        "document_url": download_url,
+        "source_url": row.get("source_url"),
+    }
+
+
+def _semantic_search_message(results: list[dict[str, Any]], query: str, label: str) -> str:
+    if not results:
+        return f"No semantic SDA library {label} results matched '{query}'."
+    titles = ", ".join(str(result.get("title") or result.get("code")) for result in results[:3])
+    return f"Found {len(results)} semantic SDA library {label} result(s) for '{query}': {titles}."
+
+
+def _semantic_strict_mode() -> bool:
+    return os.getenv("SDA_HYMNBOOK_SEMANTIC_STRICT", "").strip().lower() in {"1", "true", "yes"}
+
+
+def _embedding_dimensions() -> int:
+    value = os.getenv("OPENAI_EMBEDDING_DIMENSIONS", "1536").strip()
+    try:
+        return max(1, int(value))
+    except ValueError:
+        return 1536
+
+
+def _vector_literal(vector: list[float]) -> str:
+    return "[" + ",".join(f"{value:.8f}" for value in vector) + "]"
+
+
+def _snippet(text: str, max_chars: int = 420) -> str:
+    return _clip(re.sub(r"\s+", " ", text), max_chars)
 
 
 def _search_rows(*, query: str, number: int | None, limit: int) -> list[sqlite3.Row]:
@@ -478,6 +745,13 @@ def _search_message(hymns: list[dict[str, Any]], query: str) -> str:
         return f"No live SDA Hymnal results matched '{query}'."
     titles = ", ".join(f"{hymn['number']} {hymn['title']}" for hymn in hymns[:3])
     return f"Found {len(hymns)} live hymn result(s) for '{query}': {titles}."
+
+
+def _hymnbook_search_message(hymnbooks: list[dict[str, Any]], query: str) -> str:
+    if not hymnbooks:
+        return f"No SDA Library hymnbook metadata matched '{query}'."
+    titles = ", ".join(str(hymnbook.get("title") or hymnbook.get("code")) for hymnbook in hymnbooks[:3])
+    return f"Found {len(hymnbooks)} SDA Library hymnbook metadata result(s) for '{query}': {titles}."
 
 
 def _db_url() -> str:

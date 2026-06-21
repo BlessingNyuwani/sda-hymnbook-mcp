@@ -98,6 +98,7 @@ def test_initialize_and_tools_list() -> None:
     assert initialized["result"]["protocolVersion"] == "2025-03-26"
     tools = rpc("tools/list")
     assert "get_hymn_lyrics" in {tool["name"] for tool in tools["result"]["tools"]}
+    assert "search_hymnbooks" in {tool["name"] for tool in tools["result"]["tools"]}
 
 
 def test_search_hymns_queries_live_db_shape(monkeypatch) -> None:
@@ -146,6 +147,49 @@ def test_download_hymnbook_returns_storage_pdf(monkeypatch) -> None:
     assert structured["download_url"] == "https://sda-library.marona.ai/downloads/hymnbooks/sda-hymnal/en/pdf/HT1888.pdf"
     assert structured["files"][0]["code"] == "HT1888"
     assert structured["files"][0]["mime_type"] == "application/pdf"
+
+
+def test_search_hymnbooks_prefers_semantic_index(monkeypatch) -> None:
+    captured = {}
+
+    def fake_semantic_search_hymnbooks(**kwargs):
+        captured.update(kwargs)
+        return {
+            "kind": "hymnbook_search",
+            "status": "found",
+            "success": True,
+            "has_results": True,
+            "query": kwargs["query"],
+            "language": kwargs["language"],
+            "search_mode": "hybrid_semantic",
+            "count": 1,
+            "results": [
+                {
+                    "code": "HT1888",
+                    "title": "Hymns and Tunes",
+                    "download_url": "https://sda-library.marona.ai/downloads/hymnbooks/sda-hymnal/en/pdf/HT1888.pdf",
+                    "snippet": "Holy, holy, holy.",
+                }
+            ],
+            "hymnbooks": [],
+            "message": "Found semantic result.",
+            "content": "Found semantic result.",
+        }
+
+    monkeypatch.setattr("app.tools._semantic_search_hymnbooks", fake_semantic_search_hymnbooks)
+    result = rpc(
+        "tools/call",
+        {
+            "name": "search_hymnbooks",
+            "arguments": {"query": "holy holy holy", "language": "en", "limit": 3},
+        },
+    )
+    structured = result["result"]["structuredContent"]
+    assert structured["status"] == "found"
+    assert structured["search_mode"] == "hybrid_semantic"
+    assert structured["results"][0]["code"] == "HT1888"
+    assert captured["query"] == "holy holy holy"
+    assert captured["limit"] == 3
 
 
 def test_search_validation_returns_tool_failure() -> None:

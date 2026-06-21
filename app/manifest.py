@@ -55,6 +55,27 @@ TOOLS: list[dict[str, Any]] = [
         "requires_user_confirmation": False,
     },
     {
+        "name": "search_hymnbooks",
+        "title": "Search SDA hymnbook PDFs",
+        "description": (
+            "Search inside stored SDA Library hymnbook PDFs semantically using the "
+            "shared pgvector index, with metadata fallback."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Phrase or topic to search inside hymnbook PDFs."},
+                "language": {"type": "string", "default": "en"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 25, "default": 8},
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+        "output_schema": STANDARD_OUTPUT_SCHEMA,
+        "is_destructive": False,
+        "requires_user_confirmation": False,
+    },
+    {
         "name": "get_hymn",
         "title": "Get hymn",
         "description": "Resolve a hymn by number or title from the live SDA Hymnal source.",
