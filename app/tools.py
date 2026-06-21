@@ -5,6 +5,7 @@ import re
 import sqlite3
 import tempfile
 from contextlib import closing
+from functools import lru_cache
 from typing import Any
 
 import httpx
@@ -15,6 +16,8 @@ from app.manifest import TOOLS
 DEFAULT_DB_URL = "https://raw.githubusercontent.com/joshpetit/sda-hymnal/master/data/hymns.db"
 SOURCE_REPO_URL = "https://github.com/joshpetit/sda-hymnal"
 SOURCE_DB_WEB_URL = f"{SOURCE_REPO_URL}/blob/master/data/hymns.db"
+SDA_LIBRARY_DEFAULT_BASE_URL = "https://sda-library.marona.ai"
+SDA_LIBRARY_HYMNBOOK_CATALOG_PATH = "/catalog/hymnbooks.json"
 
 
 class SourceHTTPError(ValueError):
@@ -41,6 +44,8 @@ def call_tool(name: str, arguments: dict[str, Any] | None) -> dict[str, Any]:
         return list_hymnbook_versions(arguments)
     if name == "download_hymn":
         return download_hymn(arguments)
+    if name == "download_hymnbook":
+        return download_hymnbook(arguments)
     raise ValueError(f"Unknown tool: {name}")
 
 
@@ -169,37 +174,59 @@ def list_hymnbook_versions(arguments: dict[str, Any] | None = None) -> dict[str,
 
 
 def download_hymn(arguments: dict[str, Any]) -> dict[str, Any]:
-    number = _optional_int(arguments.get("number"))
-    requested_format = (_clean(arguments.get("format")) or "web").lower()
-    if not number:
-        return _failure("hymn_download", "number is required", "validation_error")
-    if requested_format not in {"web", "json", "database", "all"}:
-        return _failure("hymn_download", "format must be web, json, database, or all", "validation_error")
+    result = download_hymnbook(arguments)
+    result["kind"] = "hymn_download"
+    return result
 
-    lookup = get_hymn({"number": number, "include_lyrics": True})
-    if lookup.get("status") != "found":
-        lookup["kind"] = "hymn_download"
-        return lookup
 
-    links = {
-        "web": SOURCE_REPO_URL,
-        "database": _db_url(),
-        "json": SOURCE_DB_WEB_URL,
-    }
-    selected = links if requested_format == "all" else {requested_format: links.get(requested_format)}
-    selected = {key: value for key, value in selected.items() if value}
-    message = f"Found live source links for hymn {number}."
+def download_hymnbook(arguments: dict[str, Any]) -> dict[str, Any]:
+    query = _clean(arguments.get("query") or arguments.get("title") or arguments.get("code"))
+    language = _language(arguments.get("language"))
+    requested_format = (_clean(arguments.get("format")) or "pdf").lower()
+    if requested_format not in {"pdf", "all"}:
+        return _failure("hymnbook_download", "format must be pdf or all", "validation_error")
+    limit = _safe_int(arguments.get("limit"), default=10, minimum=1, maximum=50)
+
+    try:
+        matches = _storage_hymnbook_matches(query=query, language=language, limit=limit)
+    except SourceHTTPError as exc:
+        return _failure(
+            "hymnbook_download",
+            exc.message,
+            "source_http_error",
+            upstream_status_code=exc.status_code,
+            source_url=exc.url,
+        )
+    except ValueError as exc:
+        return _failure("hymnbook_download", str(exc), "source_request_failed")
+
+    if not matches:
+        suffix = f" for '{query}'" if query else ""
+        return _not_found("hymnbook_download", f"No SDA Library hymnbook PDFs matched{suffix}.")
+
+    files = [_storage_hymnbook_file(item) for item in matches]
+    first_file = files[0]
+    message = f"Found {len(files)} SDA Library hymnbook PDF(s)."
     return {
-        "kind": "hymn_download",
+        "kind": "hymnbook_download",
         "status": "found",
         "success": True,
         "has_results": True,
-        "hymn": lookup["hymn"],
-        "format": requested_format,
-        "links": selected,
+        "query": query or None,
+        "language": language,
+        "format": "pdf",
+        "count": len(files),
+        "hymnbooks": files,
+        "files": files,
+        "links": {"pdf": first_file["url"]},
+        "download_urls": [file["url"] for file in files],
+        "download_url": first_file["url"],
+        "document_url": first_file["url"],
+        "filename": first_file["filename"],
+        "mime_type": first_file["mime_type"],
         "message": message,
         "content": message,
-        "sources": _source_list(*selected.values()),
+        "sources": _source_list(_storage_hymnbook_catalog_url(), *[file.get("source_url") for file in files]),
     }
 
 
@@ -299,6 +326,105 @@ def _download_db_bytes() -> bytes:
     return response.content
 
 
+def _request_json(url: str) -> Any:
+    with _http_client() as client:
+        response = client.get(url, headers={"Accept": "application/json,*/*"})
+    if response.status_code >= 400:
+        raise SourceHTTPError(url, response.status_code, _clip(response.text, 200))
+    return response.json()
+
+
+def _storage_hymnbook_matches(*, query: str, language: str, limit: int) -> list[dict[str, Any]]:
+    catalog = _storage_hymnbook_catalog()
+    rows = catalog.get("items", []) if isinstance(catalog, dict) else []
+    terms = _terms(query)
+    scored: list[tuple[int, dict[str, Any]]] = []
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        if _clean(item.get("language")).lower() != language:
+            continue
+        if _clean(item.get("format")).lower() != "pdf":
+            continue
+        if not _clean(item.get("download_path")):
+            continue
+        score = _storage_hymnbook_score(item, terms)
+        if terms and score <= 0:
+            continue
+        scored.append((score, item))
+    scored.sort(key=lambda pair: (-pair[0], _clean(pair[1].get("title")).lower(), _clean(pair[1].get("code"))))
+    return [item for _, item in scored[:limit]]
+
+
+def _storage_hymnbook_score(item: dict[str, Any], terms: list[str]) -> int:
+    if not terms:
+        return 1
+    code = _clean(item.get("code")).lower()
+    title = _clean(item.get("title")).lower()
+    aliases = " ".join(_clean(alias).lower() for alias in item.get("aliases", []) if alias)
+    collection = _clean(item.get("collection")).lower().replace("-", " ")
+    provider = _clean(item.get("provider")).lower().replace("-", " ")
+    searchable = f"{code} {title} {aliases} {collection} {provider}"
+    score = 0
+    for term in terms:
+        if term == code:
+            score += 20
+        if term in title:
+            score += 10
+        if term in aliases:
+            score += 8
+        if term in searchable:
+            score += 2
+    return score
+
+
+def _storage_hymnbook_file(item: dict[str, Any]) -> dict[str, Any]:
+    download_path = _clean(item.get("download_path"))
+    download_url = _storage_download_url(download_path)
+    storage_path = _clean(item.get("storage_path"))
+    filename = storage_path.rsplit("/", 1)[-1] if storage_path else download_path.rsplit("/", 1)[-1]
+    code = _clean(item.get("code"))
+    return {
+        "type": "document",
+        "label": item.get("title") or code,
+        "format": "pdf",
+        "mime_type": "application/pdf",
+        "filename": filename,
+        "url": download_url,
+        "download_url": download_url,
+        "id": item.get("id"),
+        "code": code,
+        "title": item.get("title"),
+        "language": item.get("language"),
+        "collection": item.get("collection"),
+        "bytes": item.get("bytes"),
+        "sha256": item.get("sha256"),
+        "source_url": item.get("source_url"),
+        "official_archive_id": item.get("official_archive_id"),
+    }
+
+
+@lru_cache(maxsize=1)
+def _storage_hymnbook_catalog() -> dict[str, Any]:
+    payload = _request_json(_storage_hymnbook_catalog_url())
+    if not isinstance(payload, dict):
+        raise ValueError("SDA Library hymnbook catalog returned an invalid payload")
+    return payload
+
+
+def _storage_hymnbook_catalog_url() -> str:
+    return f"{_storage_base_url()}{SDA_LIBRARY_HYMNBOOK_CATALOG_PATH}"
+
+
+def _storage_download_url(download_path: str) -> str:
+    path = download_path if download_path.startswith("/") else f"/{download_path}"
+    return f"{_storage_base_url()}{path}"
+
+
+def _storage_base_url() -> str:
+    return os.getenv("SDA_LIBRARY_BASE_URL", SDA_LIBRARY_DEFAULT_BASE_URL).rstrip("/")
+
+
 def _http_client() -> httpx.Client:
     return httpx.Client(
         timeout=_request_timeout(),
@@ -356,6 +482,13 @@ def _search_message(hymns: list[dict[str, Any]], query: str) -> str:
 
 def _db_url() -> str:
     return os.getenv("SDA_HYMNBOOK_DB_URL", DEFAULT_DB_URL).strip() or DEFAULT_DB_URL
+
+
+def _language(value: Any) -> str:
+    language = _clean(value).lower() or "en"
+    if not re.fullmatch(r"[a-z0-9_-]{2,12}", language):
+        return "en"
+    return language
 
 
 def _request_timeout() -> float:
@@ -431,3 +564,7 @@ def _safe_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
     except (TypeError, ValueError):
         parsed = default
     return max(minimum, min(maximum, parsed))
+
+
+def _terms(query: str) -> list[str]:
+    return [term.lower() for term in re.findall(r"[a-zA-Z0-9]+", query) if len(term) > 1]

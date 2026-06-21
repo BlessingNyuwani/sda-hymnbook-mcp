@@ -111,19 +111,62 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "download_hymn",
-        "title": "Get hymn download/source",
-        "description": "Return live source links for a hymn or the backing SDA Hymnal database.",
+        "title": "Get hymnbook download",
+        "description": (
+            "Return stored SDA Library hymnbook PDF download links. Kept as the "
+            "legacy download tool name for agent compatibility."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "number": {"type": "integer", "minimum": 1, "maximum": 2000},
+                "query": {"type": "string", "description": "Hymnbook title or code, such as Hymns and Tunes or HT1888."},
+                "code": {"type": "string", "description": "Hymnbook code such as HT1888 or SM1885."},
+                "title": {"type": "string"},
+                "language": {"type": "string", "default": "en"},
                 "format": {
                     "type": "string",
-                    "enum": ["web", "json", "database", "all"],
-                    "default": "web",
+                    "enum": ["pdf", "all"],
+                    "default": "pdf",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 10,
                 },
             },
-            "required": ["number"],
+            "required": [],
+            "additionalProperties": False,
+        },
+        "output_schema": STANDARD_OUTPUT_SCHEMA,
+        "is_destructive": False,
+        "requires_user_confirmation": False,
+    },
+    {
+        "name": "download_hymnbook",
+        "title": "Download hymnbook",
+        "description": "Find stored SDA Library hymnbook PDFs and return local download links.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Hymnbook title or code, such as Hymns and Tunes or HT1888."},
+                "code": {"type": "string", "description": "Hymnbook code such as HT1888 or SM1885."},
+                "title": {"type": "string"},
+                "language": {"type": "string", "default": "en"},
+                "format": {
+                    "type": "string",
+                    "enum": ["pdf", "all"],
+                    "default": "pdf",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 10,
+                },
+            },
+            "required": [],
             "additionalProperties": False,
         },
         "output_schema": STANDARD_OUTPUT_SCHEMA,
@@ -180,9 +223,8 @@ def hub_registration_payload(
         "tagline": "Live SDA Hymnal search, numbers, titles, and lyrics for edge agents.",
         "description": (
             "SDA Hymnbook MCP Server reads a live SDA Hymnal source database for hymn "
-            "number search, title search, lyrics, source links, and version metadata. "
-            "Tunes/audio and additional hymnbook versions are modeled as future "
-            "capabilities."
+            "number search, title search, lyrics, and version metadata. Hymnbook "
+            "PDF downloads come from SDA Library storage."
         ),
         "category": "music",
         "version": SERVER_VERSION,

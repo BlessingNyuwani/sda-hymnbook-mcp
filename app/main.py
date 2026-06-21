@@ -18,7 +18,8 @@ agent_app = AgentApp(
     tagline="Live SDA Hymnal search, numbers, titles, and lyrics for edge agents.",
     description=(
         "SDA Hymnbook MCP Server reads a live SDA Hymnal source database for hymn "
-        "number search, title search, lyrics, source links, and version metadata."
+        "number search, title search, and lyrics, while hymnbook PDF downloads "
+        "come from SDA Library storage."
     ),
     category="music",
     version=SERVER_VERSION,
@@ -94,10 +95,28 @@ def list_hymnbook_versions() -> dict[str, Any]:
 @agent_app.tool(**_tool_kwargs("download_hymn"))
 def download_hymn(
     number: int | None = None,
+    query: str | None = None,
+    code: str | None = None,
+    title: str | None = None,
+    language: str | None = None,
     format: str | None = None,
+    limit: int | None = None,
 ) -> dict[str, Any]:
-    """Return live hymn source links."""
+    """Return stored hymnbook PDF download links."""
     return _call("download_hymn", locals())
+
+
+@agent_app.tool(**_tool_kwargs("download_hymnbook"))
+def download_hymnbook(
+    query: str | None = None,
+    code: str | None = None,
+    title: str | None = None,
+    language: str | None = None,
+    format: str | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """Return stored hymnbook PDF download links."""
+    return _call("download_hymnbook", locals())
 
 
 app = create_app()

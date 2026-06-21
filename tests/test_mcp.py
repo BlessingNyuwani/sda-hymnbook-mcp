@@ -62,6 +62,30 @@ def hymnal_db_bytes() -> bytes:
     return data
 
 
+def fake_storage_hymnbook_catalog():
+    return {
+        "items": [
+            {
+                "id": "hymnbook:en:HT1888",
+                "provider": "adventist-archives",
+                "collection": "sda-hymnal",
+                "item_type": "hymnbook",
+                "code": "HT1888",
+                "title": "Hymns and Tunes",
+                "language": "en",
+                "format": "pdf",
+                "storage_path": "hymnbooks/sda-hymnal/en/pdf/HT1888.pdf",
+                "download_path": "/downloads/hymnbooks/sda-hymnal/en/pdf/HT1888.pdf",
+                "aliases": ["HT1888", "Hymns and Tunes"],
+                "bytes": 1234,
+                "sha256": "abc",
+                "source_url": "https://documents.adventistarchives.org/Books/HT1888.pdf",
+                "official_archive_id": "HT1888",
+            }
+        ]
+    }
+
+
 def test_health_and_manifest() -> None:
     assert client.get("/health").json()["status"] == "ok"
     payload = client.get("/hub-registration").json()
@@ -105,6 +129,23 @@ def test_list_versions_counts_live_db(monkeypatch) -> None:
     structured = result["result"]["structuredContent"]
     assert structured["versions"][0]["hymn_count"] == 1
     assert structured["versions"][0]["section_count"] == 1
+
+
+def test_download_hymnbook_returns_storage_pdf(monkeypatch) -> None:
+    monkeypatch.setattr("app.tools._storage_hymnbook_catalog", fake_storage_hymnbook_catalog)
+    result = rpc(
+        "tools/call",
+        {
+            "name": "download_hymnbook",
+            "arguments": {"query": "Hymns and Tunes", "language": "en", "format": "pdf"},
+        },
+    )
+    structured = result["result"]["structuredContent"]
+    assert structured["status"] == "found"
+    assert structured["format"] == "pdf"
+    assert structured["download_url"] == "https://sda-library.marona.ai/downloads/hymnbooks/sda-hymnal/en/pdf/HT1888.pdf"
+    assert structured["files"][0]["code"] == "HT1888"
+    assert structured["files"][0]["mime_type"] == "application/pdf"
 
 
 def test_search_validation_returns_tool_failure() -> None:
