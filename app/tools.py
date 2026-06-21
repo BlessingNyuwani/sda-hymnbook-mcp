@@ -291,7 +291,7 @@ def _semantic_search_hymnbooks(query: str, language: str, limit: int) -> dict[st
             query=query,
             language=language,
             vector=vector,
-            limit=limit,
+            limit=max(limit * 4, limit),
             item_type="hymnbook",
         )
     except Exception as exc:
@@ -304,7 +304,7 @@ def _semantic_search_hymnbooks(query: str, language: str, limit: int) -> dict[st
             )
         return None
 
-    results = [_hymnbook_semantic_result(row) for row in rows]
+    results = _unique_semantic_results((_hymnbook_semantic_result(row) for row in rows), limit=limit)
     message = _semantic_search_message(results, query, "hymnbook")
     return {
         "kind": "hymnbook_search",
@@ -475,6 +475,21 @@ def _semantic_search_message(results: list[dict[str, Any]], query: str, label: s
         return f"No semantic SDA library {label} results matched '{query}'."
     titles = ", ".join(str(result.get("title") or result.get("code")) for result in results[:3])
     return f"Found {len(results)} semantic SDA library {label} result(s) for '{query}': {titles}."
+
+
+def _unique_semantic_results(results: Any, *, limit: int) -> list[dict[str, Any]]:
+    unique: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for result in results:
+        key = _clean(result.get("id") or result.get("book_id") or result.get("code") or result.get("title"))
+        if key and key in seen:
+            continue
+        if key:
+            seen.add(key)
+        unique.append(result)
+        if len(unique) >= limit:
+            break
+    return unique
 
 
 def _semantic_strict_mode() -> bool:
