@@ -3,6 +3,9 @@ name = "sda-hymnbook-mcp-server"
 version = "0.1.0"
 description = "Live SDA Hymnbook MCP server"
 requires-python = ">=3.11"
+dependencies = [
+  "marona-sdk",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
