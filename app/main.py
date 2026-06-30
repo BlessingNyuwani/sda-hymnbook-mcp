@@ -4,8 +4,8 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from agentnet_mcp_sdk import AgentApp
-from agentnet_mcp_sdk.models import AuthConfig
+from marona_sdk import AgentApp
+from marona_sdk.models import AuthConfig
 
 from app.manifest import SERVER_DISPLAY_NAME, SERVER_NAME, SERVER_VERSION, SLUG, TOOLS
 from app.tools import call_tool
