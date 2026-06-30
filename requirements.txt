@@ -1,4 +1,4 @@
-marona-sdk
+marona-sdk @ git+ssh://git@github.com/BlessingNyuwani/agentnet-mcp-sdk.git@main
 fastapi>=0.115,<1.0
 httpx>=0.28,<1.0
 mcp>=1.28,<2.0
