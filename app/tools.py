@@ -133,10 +133,15 @@ def search_hymnbooks(arguments: dict[str, Any]) -> dict[str, Any]:
 
 def get_hymn(arguments: dict[str, Any]) -> dict[str, Any]:
     number = _optional_int(arguments.get("number"))
+    query = _clean(arguments.get("query"))
+    if not number and query:
+        number = _hymn_number_from_query(query)
     title = _clean(arguments.get("title"))
+    if not title and query and not number:
+        title = query
     include_lyrics = bool(arguments.get("include_lyrics", True))
     if not number and not title:
-        return _failure("hymn_lookup", "number or title is required", "validation_error")
+        return _failure("hymn_lookup", "number, title, or query is required", "validation_error")
 
     try:
         row = _find_hymn(number=number, title=title)
@@ -164,15 +169,22 @@ def get_hymn(arguments: dict[str, Any]) -> dict[str, Any]:
         "hymn": hymn,
         "message": message,
         "content": hymn.get("lyrics_text") if include_lyrics else message,
+        "content_type": "text/plain",
+        "presentation_hint": "song",
+        "context": "Exact hymn result. Present the lyrics directly when the user asks for a hymn or hymn number.",
         "sources": _source_list(_db_url(), SOURCE_REPO_URL),
     }
 
 
 def get_hymn_lyrics(arguments: dict[str, Any]) -> dict[str, Any]:
     number = _optional_int(arguments.get("number"))
-    if not number:
-        return _failure("hymn_lyrics", "number is required", "validation_error")
-    result = get_hymn({"number": number, "include_lyrics": True})
+    query = _clean(arguments.get("query"))
+    title = _clean(arguments.get("title"))
+    if not number and query:
+        number = _hymn_number_from_query(query)
+    if not number and not title and not query:
+        return _failure("hymn_lyrics", "number, title, or query is required", "validation_error")
+    result = get_hymn({"number": number, "title": title, "query": query, "include_lyrics": True})
     result["kind"] = "hymn_lyrics"
     return result
 
@@ -832,6 +844,16 @@ def _optional_int(value: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return parsed if parsed > 0 else None
+
+
+def _hymn_number_from_query(query: str) -> int | None:
+    match = re.search(r"\b(?:hymn|number|no\.?|#)\s*([0-9]{1,4})\b", query, flags=re.IGNORECASE)
+    if not match:
+        match = re.search(r"\b([0-9]{1,4})\b", query)
+    if not match:
+        return None
+    number = _optional_int(match.group(1))
+    return number if number and number <= 2000 else None
 
 
 def _clean(value: Any) -> str:

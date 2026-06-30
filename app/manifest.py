@@ -84,12 +84,17 @@ TOOLS: list[dict[str, Any]] = [
             "properties": {
                 "number": {"type": "integer", "minimum": 1, "maximum": 2000},
                 "title": {"type": "string"},
+                "query": {
+                    "type": "string",
+                    "description": "Natural request such as hymn number 100.",
+                },
                 "include_lyrics": {"type": "boolean", "default": True},
             },
             "required": [],
             "anyOf": [
                 {"required": ["number"]},
                 {"required": ["title"]},
+                {"required": ["query"]},
             ],
             "additionalProperties": False,
         },
@@ -105,8 +110,18 @@ TOOLS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "number": {"type": "integer", "minimum": 1, "maximum": 2000},
+                "title": {"type": "string"},
+                "query": {
+                    "type": "string",
+                    "description": "Natural request such as lyrics for hymn 100.",
+                },
             },
-            "required": ["number"],
+            "required": [],
+            "anyOf": [
+                {"required": ["number"]},
+                {"required": ["title"]},
+                {"required": ["query"]},
+            ],
             "additionalProperties": False,
         },
         "output_schema": STANDARD_OUTPUT_SCHEMA,

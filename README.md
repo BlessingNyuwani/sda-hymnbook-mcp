@@ -19,11 +19,17 @@ Hymnbook downloads are resolved from the SDA Library storage catalog:
 ## Tools
 
 - `search_hymns`
-- `get_hymn`
-- `get_hymn_lyrics`
+- `get_hymn(number=100)` or `get_hymn(query="hymn number 100")`
+- `get_hymn_lyrics(number=100)` or `get_hymn_lyrics(query="lyrics for hymn 100")`
 - `list_hymnbook_versions`
 - `download_hymn`
 - `download_hymnbook`
+
+Example user requests:
+
+- `Show hymn number 100`
+- `Get lyrics for hymn 1`
+- `Search hymns about the Lord`
 
 ## Local run
 

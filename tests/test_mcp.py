@@ -124,6 +124,18 @@ def test_get_hymn_lyrics(monkeypatch) -> None:
     assert "Praise to the Lord" in structured["hymn"]["lyrics_text"]
 
 
+def test_get_hymn_lyrics_accepts_natural_number_query(monkeypatch) -> None:
+    monkeypatch.setattr("app.tools._download_db_bytes", hymnal_db_bytes)
+    result = rpc(
+        "tools/call",
+        {"name": "get_hymn_lyrics", "arguments": {"query": "hymn number 1"}},
+    )
+    structured = result["result"]["structuredContent"]
+    assert structured["status"] == "found"
+    assert structured["hymn"]["number"] == 1
+    assert structured["presentation_hint"] == "song"
+
+
 def test_list_versions_counts_live_db(monkeypatch) -> None:
     monkeypatch.setattr("app.tools._download_db_bytes", hymnal_db_bytes)
     result = rpc("tools/call", {"name": "list_hymnbook_versions", "arguments": {}})

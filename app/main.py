@@ -84,6 +84,7 @@ def search_hymnbooks(
 def get_hymn(
     number: int | None = None,
     title: str | None = None,
+    query: str | None = None,
     include_lyrics: bool | None = None,
 ) -> dict[str, Any]:
     """Resolve a hymn from the live SDA Hymnal source."""
@@ -91,7 +92,11 @@ def get_hymn(
 
 
 @agent_app.tool(**_tool_kwargs("get_hymn_lyrics"))
-def get_hymn_lyrics(number: int | None = None) -> dict[str, Any]:
+def get_hymn_lyrics(
+    number: int | None = None,
+    title: str | None = None,
+    query: str | None = None,
+) -> dict[str, Any]:
     """Return hymn lyrics from the live SDA Hymnal source."""
     return _call("get_hymn_lyrics", locals())
 
