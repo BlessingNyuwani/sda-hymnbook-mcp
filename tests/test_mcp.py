@@ -27,6 +27,13 @@ def rpc(method: str, params: dict | None = None, request_id: int = 1):
     return response.json()
 
 
+def assert_standard_result(structured: dict) -> None:
+    for field in ("status", "success", "message", "content", "content_type", "presentation_hint", "context"):
+        assert field in structured
+    assert isinstance(structured["content"], str)
+    assert isinstance(structured["context"], str)
+
+
 def hymnal_db_bytes() -> bytes:
     conn = sqlite3.connect(":memory:")
     conn.executescript(
@@ -108,6 +115,7 @@ def test_search_hymns_queries_live_db_shape(monkeypatch) -> None:
         {"name": "search_hymns", "arguments": {"query": "lord"}},
     )
     structured = result["result"]["structuredContent"]
+    assert_standard_result(structured)
     assert structured["status"] == "found"
     assert structured["hymns"][0]["number"] == 1
     assert structured["hymns"][0]["title"] == "Praise to the Lord"
@@ -120,6 +128,7 @@ def test_get_hymn_lyrics(monkeypatch) -> None:
         {"name": "get_hymn_lyrics", "arguments": {"number": 1}},
     )
     structured = result["result"]["structuredContent"]
+    assert_standard_result(structured)
     assert structured["status"] == "found"
     assert "Praise to the Lord" in structured["hymn"]["lyrics_text"]
 
@@ -131,6 +140,7 @@ def test_get_hymn_lyrics_accepts_natural_number_query(monkeypatch) -> None:
         {"name": "get_hymn_lyrics", "arguments": {"query": "hymn number 1"}},
     )
     structured = result["result"]["structuredContent"]
+    assert_standard_result(structured)
     assert structured["status"] == "found"
     assert structured["hymn"]["number"] == 1
     assert structured["presentation_hint"] == "song"
@@ -140,6 +150,7 @@ def test_list_versions_counts_live_db(monkeypatch) -> None:
     monkeypatch.setattr("app.tools._download_db_bytes", hymnal_db_bytes)
     result = rpc("tools/call", {"name": "list_hymnbook_versions", "arguments": {}})
     structured = result["result"]["structuredContent"]
+    assert_standard_result(structured)
     assert structured["versions"][0]["hymn_count"] == 1
     assert structured["versions"][0]["section_count"] == 1
 
@@ -154,7 +165,10 @@ def test_download_hymnbook_returns_storage_pdf(monkeypatch) -> None:
         },
     )
     structured = result["result"]["structuredContent"]
+    assert_standard_result(structured)
     assert structured["status"] == "found"
+    assert structured["content_type"] == "document"
+    assert structured["presentation_hint"] == "download"
     assert structured["format"] == "pdf"
     assert structured["download_url"] == "https://sda-library.marona.ai/downloads/hymnbooks/sda-hymnal/en/pdf/HT1888.pdf"
     assert structured["files"][0]["code"] == "HT1888"
@@ -197,6 +211,7 @@ def test_search_hymnbooks_prefers_semantic_index(monkeypatch) -> None:
         },
     )
     structured = result["result"]["structuredContent"]
+    assert_standard_result(structured)
     assert structured["status"] == "found"
     assert structured["search_mode"] == "hybrid_semantic"
     assert structured["results"][0]["code"] == "HT1888"
@@ -207,5 +222,7 @@ def test_search_hymnbooks_prefers_semantic_index(monkeypatch) -> None:
 def test_search_validation_returns_tool_failure() -> None:
     result = rpc("tools/call", {"name": "search_hymns", "arguments": {}})
     structured = result["result"]["structuredContent"]
+    assert_standard_result(structured)
     assert structured["status"] == "failed"
     assert structured["success"] is False
+    assert structured["content_type"] == "error"

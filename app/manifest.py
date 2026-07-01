@@ -18,12 +18,23 @@ STANDARD_OUTPUT_SCHEMA: dict[str, Any] = {
         "success": {"type": "boolean"},
         "message": {"type": "string"},
         "content": {"type": "string"},
+        "content_type": {"type": "string"},
+        "presentation_hint": {"type": "string"},
+        "context": {"type": "string"},
+        "files": {
+            "type": "array",
+            "items": {"type": "object", "additionalProperties": True},
+        },
+        "artifacts": {
+            "type": "array",
+            "items": {"type": "object", "additionalProperties": True},
+        },
         "sources": {
             "type": "array",
             "items": {"type": "object", "additionalProperties": True},
         },
     },
-    "required": ["status", "success", "message"],
+    "required": ["status", "success", "message", "content", "content_type", "presentation_hint", "context"],
     "additionalProperties": True,
 }
 

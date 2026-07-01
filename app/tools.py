@@ -35,20 +35,22 @@ def list_tools_for_hub() -> list[dict[str, Any]]:
 def call_tool(name: str, arguments: dict[str, Any] | None) -> dict[str, Any]:
     arguments = arguments or {}
     if name == "search_hymns":
-        return search_hymns(arguments)
-    if name == "search_hymnbooks":
-        return search_hymnbooks(arguments)
-    if name == "get_hymn":
-        return get_hymn(arguments)
-    if name == "get_hymn_lyrics":
-        return get_hymn_lyrics(arguments)
-    if name == "list_hymnbook_versions":
-        return list_hymnbook_versions(arguments)
-    if name == "download_hymn":
-        return download_hymn(arguments)
-    if name == "download_hymnbook":
-        return download_hymnbook(arguments)
-    raise ValueError(f"Unknown tool: {name}")
+        result = search_hymns(arguments)
+    elif name == "search_hymnbooks":
+        result = search_hymnbooks(arguments)
+    elif name == "get_hymn":
+        result = get_hymn(arguments)
+    elif name == "get_hymn_lyrics":
+        result = get_hymn_lyrics(arguments)
+    elif name == "list_hymnbook_versions":
+        result = list_hymnbook_versions(arguments)
+    elif name == "download_hymn":
+        result = download_hymn(arguments)
+    elif name == "download_hymnbook":
+        result = download_hymnbook(arguments)
+    else:
+        raise ValueError(f"Unknown tool: {name}")
+    return _standardize_result(result)
 
 
 def search_hymns(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -823,6 +825,62 @@ def _failure(kind: str, message: str, error_code: str, **extra: Any) -> dict[str
         "error": {"code": error_code, **{k: v for k, v in extra.items() if k.startswith("upstream_")}},
         **{k: v for k, v in extra.items() if not k.startswith("upstream_")},
     }
+
+
+def _standardize_result(result: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(result, dict):
+        return _standardize_result(
+            _failure("tool_result", "The tool returned an invalid result.", "contract_error")
+        )
+    standardized = dict(result)
+    message = str(standardized.get("message") or standardized.get("content") or "Done.").strip()
+    if not message:
+        message = "Done."
+    standardized["message"] = message
+    standardized["content"] = str(standardized.get("content") or message)
+    standardized.setdefault("content_type", _standard_content_type(standardized))
+    standardized.setdefault("presentation_hint", _standard_presentation_hint(standardized))
+    standardized.setdefault("context", _standard_context(standardized))
+    return standardized
+
+
+def _standard_content_type(result: dict[str, Any]) -> str:
+    kind = str(result.get("kind") or "").lower()
+    if result.get("success") is False:
+        return "error"
+    if kind in {"hymn_lookup", "hymn_lyrics"}:
+        return "text/plain"
+    if kind in {"hymnbook_download", "hymn_download"} or result.get("files"):
+        return "document"
+    if kind in {"hymn_search", "hymnbook_search", "hymnbook_versions"} or result.get("hymns") or result.get("hymnbooks"):
+        return "list"
+    return "text"
+
+
+def _standard_presentation_hint(result: dict[str, Any]) -> str:
+    kind = str(result.get("kind") or "").lower()
+    if kind in {"hymn_lookup", "hymn_lyrics"}:
+        return "song"
+    if kind in {"hymnbook_download", "hymn_download"} or result.get("files"):
+        return "download"
+    return "display_as_provided"
+
+
+def _standard_context(result: dict[str, Any]) -> str:
+    kind = str(result.get("kind") or "").lower()
+    if result.get("success") is False:
+        return "This tool failed. Show content/message as the user-facing failure and use error for diagnostics."
+    if kind in {"hymn_lookup", "hymn_lyrics"}:
+        return "Exact hymn result. Present the lyrics directly when the user asks for a hymn or hymn number."
+    if kind in {"hymnbook_download", "hymn_download"} or result.get("files"):
+        return "Hymnbook download result. Show the file artifact or download action directly."
+    if kind == "hymn_search":
+        return "Hymn search result. Present matching hymns with hymn numbers and titles."
+    if kind == "hymnbook_search":
+        return "Hymnbook search result. Present matching hymnbooks and use files when the user asks to download."
+    if kind == "hymnbook_versions":
+        return "Hymnbook source/version result. Present the available source details directly."
+    return "Use content as the primary user-facing result and structured fields for details."
 
 
 def _source_list(*urls: str | None) -> list[dict[str, str]]:
