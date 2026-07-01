@@ -4,7 +4,7 @@ from typing import Any
 
 
 SERVER_NAME = "sda-hymnbook-mcp-server"
-SERVER_DISPLAY_NAME = "SDA Hymnbook MCP Server"
+SERVER_DISPLAY_NAME = "SDA Hymnbook"
 SERVER_VERSION = "0.1.0"
 PROTOCOL_VERSION = "2025-03-26"
 SLUG = "sda-hymnbook"
@@ -144,7 +144,7 @@ TOOLS: list[dict[str, Any]] = [
         "title": "List hymnbook versions",
         "description": (
             "List available live hymnbook source/version metadata and future version "
-            "capabilities exposed by this MCP server."
+            "capabilities."
         ),
         "input_schema": {
             "type": "object",
@@ -160,8 +160,8 @@ TOOLS: list[dict[str, Any]] = [
         "name": "download_hymn",
         "title": "Get hymnbook download",
         "description": (
-            "Return stored SDA Library hymnbook PDF download links. Kept as the "
-            "legacy download tool name for agent compatibility."
+            "Return stored SDA Library hymnbook PDF download links using shorter "
+            "natural wording."
         ),
         "input_schema": {
             "type": "object",
@@ -267,11 +267,10 @@ def hub_registration_payload(
     return {
         "name": SERVER_DISPLAY_NAME,
         "slug": SLUG,
-        "tagline": "Live SDA Hymnal search, numbers, titles, and lyrics for edge agents.",
+        "tagline": "Live SDA Hymnal search, numbers, titles, and lyrics.",
         "description": (
-            "SDA Hymnbook MCP Server reads a live SDA Hymnal source database for hymn "
-            "number search, title search, lyrics, and version metadata. Hymnbook "
-            "PDF downloads come from SDA Library storage."
+            "Search SDA hymns by number, title, lyric, or keyword, read hymn "
+            "lyrics directly, and download available SDA Library hymnbook PDFs."
         ),
         "category": "music",
         "version": SERVER_VERSION,

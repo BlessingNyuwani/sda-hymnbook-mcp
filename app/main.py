@@ -15,11 +15,10 @@ agent_app = AgentApp(
     name=SERVER_DISPLAY_NAME,
     server_name=SERVER_NAME,
     slug=SLUG,
-    tagline="Live SDA Hymnal search, numbers, titles, and lyrics for edge agents.",
+    tagline="Live SDA Hymnal search, numbers, titles, and lyrics.",
     description=(
-        "SDA Hymnbook MCP Server reads a live SDA Hymnal source database for hymn "
-        "number search, title search, and lyrics, while hymnbook PDF downloads "
-        "come from SDA Library storage."
+        "Search SDA hymns by number, title, lyric, or keyword, read hymn lyrics "
+        "directly, and download available SDA Library hymnbook PDFs."
     ),
     category="music",
     version=SERVER_VERSION,
