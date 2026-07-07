@@ -10,6 +10,28 @@ PROTOCOL_VERSION = "2025-03-26"
 SLUG = "sda-hymnbook"
 
 PERMISSIONS: list[dict[str, Any]] = []
+EXECUTION_MODES = ["online", "offline", "hybrid"]
+
+
+def execution_targets(server_url: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "mode": "online",
+            "type": "remote_mcp",
+            "url": server_url,
+            "transport": "streamable_http",
+            "endpoint": "/mcp",
+        },
+        {
+            "mode": "offline",
+            "type": "oci_image",
+            "image": f"registry.marona.ai/library/{SERVER_NAME}:{SERVER_VERSION}",
+            "transport": "streamable_http",
+            "endpoint": "/mcp",
+            "port": 62752,
+            "assets": ["sda-hymnal-index", "hymnbook-pdf-cache"],
+        },
+    ]
 
 STANDARD_OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -254,6 +276,8 @@ def public_manifest(
         "server_url": server_url,
         "health_check_url": health_check_url,
         "icon_url": icon_url,
+        "execution_modes": EXECUTION_MODES,
+        "execution_targets": execution_targets(server_url),
         "tools": TOOLS,
         "permissions": PERMISSIONS,
     }
@@ -275,6 +299,8 @@ def hub_registration_payload(
         "category": "music",
         "version": SERVER_VERSION,
         "icon_url": icon_url,
+        "execution_modes": EXECUTION_MODES,
+        "execution_targets": execution_targets(server_url),
         "mcp_server": {
             "name": SERVER_DISPLAY_NAME,
             "server_url": server_url,
@@ -282,9 +308,10 @@ def hub_registration_payload(
             "protocol_version": PROTOCOL_VERSION,
             "health_check_url": health_check_url,
             "connection_config": {
-                "local": True,
                 "docs_url": server_url.replace("/mcp", "/docs"),
                 "manifest_url": server_url.replace("/mcp", "/manifest"),
+                "execution_modes": EXECUTION_MODES,
+                "execution_targets": execution_targets(server_url),
             },
         },
         "tools": [

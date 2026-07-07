@@ -22,6 +22,18 @@ agent_app = AgentApp(
     ),
     category="music",
     version=SERVER_VERSION,
+    execution_modes=["online", "offline", "hybrid"],
+    execution_targets=[
+        {
+            "mode": "offline",
+            "type": "oci_image",
+            "image": f"registry.marona.ai/library/{SERVER_NAME}:{SERVER_VERSION}",
+            "transport": "streamable_http",
+            "endpoint": "/mcp",
+            "port": 62752,
+            "assets": ["sda-hymnal-index", "hymnbook-pdf-cache"],
+        }
+    ],
     icon_path="sda-hymnbook-icon.svg",
     static_dir="app/static",
     auth=AuthConfig(is_auth_required=False, auth_type="none"),
