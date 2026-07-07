@@ -13,7 +13,7 @@ RUN mkdir -p -m 0700 /root/.ssh \
     && ssh-keyscan github.com >> /root/.ssh/known_hosts
 
 COPY requirements.txt .
-RUN --mount=type=ssh pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 
