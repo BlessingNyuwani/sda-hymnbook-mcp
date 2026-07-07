@@ -2,8 +2,6 @@ services:
   sda-hymnbook-mcp:
     build:
       context: .
-      ssh:
-        - default
     image: sda-hymnbook-mcp:latest
     container_name: sda-hymnbook-mcp
     restart: unless-stopped
