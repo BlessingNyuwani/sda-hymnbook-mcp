@@ -10,7 +10,7 @@ PROTOCOL_VERSION = "2025-03-26"
 SLUG = "sda-hymnbook"
 
 PERMISSIONS: list[dict[str, Any]] = []
-EXECUTION_MODES = ["online", "offline", "hybrid"]
+EXECUTION_MODES = ["online"]
 
 
 def execution_targets(server_url: str) -> list[dict[str, Any]]:
@@ -21,15 +21,6 @@ def execution_targets(server_url: str) -> list[dict[str, Any]]:
             "url": server_url,
             "transport": "streamable_http",
             "endpoint": "/mcp",
-        },
-        {
-            "mode": "offline",
-            "type": "oci_image",
-            "image": f"registry.marona.ai/library/{SERVER_NAME}:{SERVER_VERSION}",
-            "transport": "streamable_http",
-            "endpoint": "/mcp",
-            "port": 62752,
-            "assets": ["sda-hymnal-index", "hymnbook-pdf-cache"],
         },
     ]
 
