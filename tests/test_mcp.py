@@ -20,7 +20,13 @@ def rpc(method: str, params: dict | None = None, request_id: int = 1):
         }
     response = client.post(
         "/mcp",
-        headers={"Accept": "application/json, text/event-stream"},
+        headers={
+            "Accept": "application/json, text/event-stream",
+            "X-Marona-Identity-Subject": "usr_test",
+            "X-Marona-Identity-Trust": "verified",
+            "X-Marona-Session-Id": "session_test",
+            "X-Marona-Interface": "api",
+        },
         json={"jsonrpc": "2.0", "id": request_id, "method": method, "params": params or {}},
     )
     assert response.status_code == 200
