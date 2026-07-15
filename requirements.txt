@@ -1,4 +1,4 @@
-marona-sdk>=0.1.11,<0.2.0
+marona-sdk==0.1.14
 fastapi>=0.115,<1.0
 httpx>=0.28,<1.0
 mcp>=1.28,<2.0
