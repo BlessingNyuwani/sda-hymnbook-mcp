@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from marona_sdk import runtime_identity_contract
 
 
 SERVER_NAME = "sda-hymnbook-mcp-server"
@@ -271,7 +270,6 @@ def public_manifest(
         "icon_url": icon_url,
         "execution_modes": EXECUTION_MODES,
         "execution_targets": execution_targets(server_url),
-        "identity_context": runtime_identity_contract(),
         "tools": TOOLS,
         "permissions": PERMISSIONS,
     }
@@ -295,7 +293,6 @@ def hub_registration_payload(
         "icon_url": icon_url,
         "execution_modes": EXECUTION_MODES,
         "execution_targets": execution_targets(server_url),
-        "identity_context": runtime_identity_contract(),
         "mcp_server": {
             "name": SERVER_DISPLAY_NAME,
             "server_url": server_url,
@@ -307,7 +304,6 @@ def hub_registration_payload(
                 "manifest_url": server_url.replace("/mcp", "/manifest"),
                 "execution_modes": EXECUTION_MODES,
                 "execution_targets": execution_targets(server_url),
-                "identity_context": runtime_identity_contract(),
             },
         },
         "tools": [

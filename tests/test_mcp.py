@@ -22,8 +22,6 @@ def rpc(method: str, params: dict | None = None, request_id: int = 1):
         "/mcp",
         headers={
             "Accept": "application/json, text/event-stream",
-            "X-Marona-Identity-Subject": "usr_test",
-            "X-Marona-Identity-Trust": "verified",
             "X-Marona-Session-Id": "session_test",
             "X-Marona-Interface": "api",
         },
